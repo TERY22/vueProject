@@ -1,66 +1,114 @@
 <template>
-  <div class="container pt-1">
-    <div class="card">
-      <h2>News {{ now }}</h2>
-      <span>Opened: {{ openRate }} | Readed: {{ readRate }}</span>
-    </div>
-    <app-news
-      v-for="(item) in news"
-      :key="item.id"
-      :title="item.title"
-      :id="item.id"
-      :is-open="item.isOpen"
-      :was-read="item.wasRead"
-      @open-news="openRate++"
-      @read-news="readNews"
-      @unmark="unReadNews"
-    ></app-news>
+  <div class="container">
+    <app-alert :alert="alert" @close="alert = null"></app-alert>
+
+    <form class="card" @submit.prevent="createPerson">
+      <h2>DataBase</h2>
+
+      <div class="form-control">
+        <label for="name">Enter Name</label>
+        <input type="text" id="name" v-model.trim="name">
+      </div>
+
+      <button class="btn primary" :disabled="name.length === 0">Create person</button>
+    </form>
+
+    <app-loader v-if="loading"></app-loader>
+
+    <app-people-list
+      v-else
+      :people="people"
+      @load="loadPeople"
+      @remove="removePerson"
+    ></app-people-list>
   </div>
 </template>
 
 <script>
-import AppNews from './components/AppNews'
+import AppPeopleList from './components/AppPeopleList'
+import axios from 'axios'
+import AppAlert from './components/AppAlert'
+import AppLoader from './components/AppLoader'
 
 export default {
   data () {
     return {
-      now: new Date().toLocaleDateString(),
-      news: [
-        { title: 'Joe Biden win', id: 1, isOpen: false, wasRead: false },
-        { title: 'Trump lose', id: 2, isOpen: false, wasRead: false },
-        { title: 'Trump lose', id: 3, isOpen: false, wasRead: false },
-        { title: 'Trump lose', id: 4, isOpen: false, wasRead: false }
-      ],
-      openRate: 0,
-      readRate: 0
+      name: '',
+      people: [],
+      alert: {},
+      loading: false
     }
+  },
+  mounted () {
+    this.loadPeople()
   },
   methods: {
-    readNews (id) {
-      const index = this.news.findIndex(news => news.id === id)
-      this.news[index].wasRead = true
-      this.readRate++
+    async createPerson () {
+      const response = await fetch('https://vue-with-http-6de8e-default-rtdb.europe-west1.firebasedatabase.app/people.json', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          firstName: this.name
+        })
+      })
+
+      const firebaseData = await response.json()
+
+      this.people.push({
+        firstName: this.name,
+        id: firebaseData.nmae
+      })
+
+      this.name = ''
     },
-    unReadNews (id) {
-      const news = this.news.find(news => news.id === id)
-      news.wasRead = false
-      this.readRate--
-    }
-  },
-  provide () {
-    return {
-      title: 'All news list',
-      news: this.news
+    async loadPeople () {
+      try {
+        this.loading = true
+        const { data } = await axios.get('https://vue-with-http-6de8e-default-rtdb.europe-west1.firebasedatabase.app/people.json')
+        if (!data) {
+          throw new Error('People List is empty')
+        }
+        this.people = Object.keys(data).map(key => {
+          return {
+            id: key,
+            ...data[key]
+          }
+        })
+        this.loading = false
+      } catch (error) {
+        this.alert = {
+          type: 'danger',
+          title: 'Error',
+          text: error.message
+        }
+        this.loading = false
+      }
+    },
+    async removePerson (id) {
+      try {
+        const name = this.people.find(person => person.id === id).firstName
+        await axios.delete(`https://vue-with-http-6de8e-default-rtdb.europe-west1.firebasedatabase.app/people/${id}.json`)
+        this.people = this.people.filter(person => person.id !== id)
+        this.alert = {
+          type: 'primary',
+          title: 'Success',
+          text: `User named "${name}" has been deleted`
+        }
+      } catch (error) {
+
+      }
     }
   },
   components: {
-    'app-news': AppNews
+    AppPeopleList,
+    AppAlert,
+    AppLoader
   }
 }
 </script>
 
 <style scoped>
-  h2 {
-    color: darkorchid;
-  }
+
 </style>
